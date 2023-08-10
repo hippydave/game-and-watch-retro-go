@@ -748,18 +748,21 @@ def flash(*, args, **kwargs):
     programmer.program(str(args.file), base_address=base_address)
 
 
-def erase(**kwargs):
-    """Erase the entire external flash.
+def erase(*, args, **kwargs):
+    """Erase some partition of the internal or external flash."""
+    if args.destination in ("ext", "all"):
+        # Just setting an artibrarily long timeout
+        extflash_erase(0, 0, whole_chip=True, timeout=10_000)
 
-    TODO: add intflash support
     eraser = FlashEraser(session, FlashEraser.Mode.SECTOR)
-    eraser.erase([
-        (0x0800_0000, 0x0800_0000 + (256 * 1024)),
-        (0x0810_0000, 0x0810_0000 + (256 * 1024)),
-    ])
-    """
-    # Just setting an artibrarily long timeout
-    extflash_erase(0, 0, whole_chip=True, timeout=10_000)
+    addresses = []
+    if args.destination in ("bank1", "all"):
+        addresses.append((0x0800_0000, 0x0800_0000 + (256 * 1024)))
+    if args.destination in ("bank2", "all"):
+        addresses.append((0x0810_0000, 0x0810_0000 + (256 * 1024)))
+
+    if addresses:
+        eraser.erase(addresses)
 
 
 def _ls(fs, path):
@@ -1023,6 +1026,8 @@ def main():
             help="Save/Load progress from a file; allows resuming a interrupted extflash operation.")
 
     subparser = add_command(erase)
+    subparser.add_argument("destination", choices=("bank1", "bank2", "ext", "all"),
+            help="On-device location to erase.")
 
     subparser = add_command(ls)
     subparser.add_argument('path', nargs='?', type=Path, default='',

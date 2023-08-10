@@ -796,17 +796,21 @@ reset:
 .PHONY: reset
 
 erase_intflash_1:
-	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "init; halt; flash erase_address 0x08000000 131072; resume; exit"
+	@echo "Erasing Internal Flash Bank 1..."
+	$(GNWMANAGER) erase bank1
+	@echo "Erase Complete!"
 .PHONY: erase_intflash_1
 
 erase_intflash_2:
-	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "init; halt; flash erase_address 0x08100000 131072; resume; exit"
+	@echo "Erasing Internal Flash Bank 2..."
+	$(GNWMANAGER) erase bank2
+	@echo "Erase Complete!"
 .PHONY: erase_intflash_2
 
 erase_extflash:
 	@echo "Erasing External Flash..."
 	@$(GNWMANAGER) erase
-	@echo "Erasing External Complete!"
+	@echo "Erase Complete!"
 .PHONY: erase_extflash
 
 format:
