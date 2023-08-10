@@ -1105,16 +1105,6 @@ def main():
 
             try:
                 for i, args in enumerate(parsed_args):
-                    if args.intflash_address is None:
-                        args.intflash_address = 0x0800_0000 if args.intflash_bank == 1 else 0x0810_0000
-
-                    if args.intflash_address in valid_intflash_bank_1_addresses:
-                        args.intflash_bank = 1
-                    elif args.intflash_address in valid_intflash_bank_2_addresses:
-                        args.intflash_bank = 2
-                    else:
-                        raise NotImplementedError
-
                     if i == 0:
                         start_flashapp(args.intflash_address)
 
