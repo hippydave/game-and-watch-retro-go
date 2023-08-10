@@ -817,51 +817,21 @@ format:
 	@$(GNWMANAGER) format
 
 start_bank_1:
-	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg \
-		-c 'init; reset halt' \
-		-c 'set MSP 0x[string range [mdw 0x08000000] 12 19]' \
-		-c 'set PC 0x[string range [mdw 0x08000004] 12 19]' \
-		-c 'echo "Setting MSP -> $$MSP"' \
-		-c 'echo "Setting PC -> $$PC"' \
-		-c 'reg msp $$MSP' \
-		-c 'reg pc $$PC' \
-		-c 'resume;exit'
+	$(GNWMANAGER) start --intflash-address=0x08000000
 .PHONY: start_bank_1
 
 start_bank_2:
-	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg \
-		-c 'init; reset halt' \
-		-c 'set MSP 0x[string range [mdw 0x08100000] 12 19]' \
-		-c 'set PC 0x[string range [mdw 0x08100004] 12 19]' \
-		-c 'echo "Setting MSP -> $$MSP"' \
-		-c 'echo "Setting PC -> $$PC"' \
-		-c 'reg msp $$MSP' \
-		-c 'reg pc $$PC' \
-		-c 'resume;exit'
+	$(GNWMANAGER) start --intflash-address=0x08100000
 .PHONY: start_bank_2
 
 start:  # Start code located at INTFLASH_ADDRESS
-	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg \
-		-c 'init; reset halt' \
-		-c 'set MSP 0x[string range [mdw $(INTFLASH_ADDRESS)] 12 19]' \
-		-c 'set PC 0x[string range [mdw [format 0x%x [expr {$(INTFLASH_ADDRESS) + 0x4}]]] 12 19]' \
-		-c 'echo "Setting MSP -> $$MSP"' \
-		-c 'echo "Setting PC -> $$PC"' \
-		-c 'reg msp $$MSP' \
-		-c 'reg pc $$PC' \
-		-c 'resume;exit'
+	$(GNWMANAGER) start --intflash-address=$(INTFLASH_ADDRESS)
 .PHONY: start
 
 
-# Programs the internal flash using a new OpenOCD instance
 flash_intflash: $(BUILD_DIR)/$(TARGET)_intflash.bin
 	$(GNWMANAGER) flash $(INTFLASH_BANK_STR) $< --offset $(INTFLASH_BANK_OFFSET)
 .PHONY: flash_intflash
-
-# Flashes using an existing openocd instance
-flash_intflash_nc: $(BUILD_DIR)/$(TARGET)_intflash.bin
-	echo "program $< $(INTFLASH_ADDRESS) verify reset" | nc -c localhost 4444
-.PHONY: flash_intflash_nc
 
 flash_extflash: $(BUILD_DIR)/$(TARGET)_extflash.bin
 	@$(GNWMANAGER) flash ext $< --offset $(EXTFLASH_OFFSET) --progress-file=$(BUILD_DIR)/gnwmanager-flash-progress \

@@ -985,6 +985,14 @@ def screenshot(*, args, fs, **kwargs):
     img.save(args.output)
 
 
+def start(**kwargs):
+    """Restart the device at --intflash-address.
+
+    No-op operation; restarting is handled by the main loop.
+    """
+    pass
+
+
 def main():
     global commands, subparsers
     commands = {}
@@ -1000,7 +1008,7 @@ def main():
     valid_intflash_bank_2_addresses = set(range(0x0810_0000, (0x0810_0000 + (256 << 10)), 4))
     group.add_argument("--intflash-address",
                        type=lambda x: int(x,0),
-                       help="Retro Go internal flash address.")
+                       help="Retro Go internal flash address. Has priority over --intflash-bank")
 
     parser = argparse.ArgumentParser(
         prog="gnwmanager",
@@ -1064,6 +1072,8 @@ def main():
     subparser = add_command(screenshot)
     subparser.add_argument('output', nargs='?', type=Path, default=Path("screenshot.png"),
             help="Destination file or directory.")
+
+    subparser = add_command(start)
 
     subparser = add_command(shell)
 
