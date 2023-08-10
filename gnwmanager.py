@@ -10,6 +10,7 @@ from pyocd.core.exceptions import ProbeError
 from pyocd.coresight.coresight_target import CoreSightTarget
 from pyocd.core.memory_map import (FlashRegion, RamRegion, MemoryMap)
 from pyocd.coresight.cortex_m import CortexM
+from pyocd.coresight.minimal_mem_ap import MinimalMemAP
 import usb
 import shlex
 from copy import copy
@@ -275,32 +276,6 @@ class DBGMCU:
     CR = 0xE00E1004
     CR_VALUE = 0x7 # DBG_STANDBY | DBG_STOP | DBG_SLEEP
 
-class MiniAP(object):
-    """Minimalistic Access Port implementation."""
-    AP0_CSW_ADDR = 0x00
-    AP0_CSW_ADDR_VAL = 0x03000012
-    AP0_TAR_ADDR = 0x04
-    AP0_IDR_ADDR = 0xFC
-    AP0_DRW_ADDR = 0x0C
-
-    def __init__(self, dp):
-        self.dp = dp
-
-    def init(self):
-        # Init AP #0
-        IDR = self.dp.read_ap(MiniAP.AP0_IDR_ADDR)
-        # Check expected MEM-AP
-        assert IDR == 0x74770001
-        self.dp.write_ap(MiniAP.AP0_CSW_ADDR, MiniAP.AP0_CSW_ADDR_VAL)
-
-    def read32(self, addr):
-        self.dp.write_ap(MiniAP.AP0_TAR_ADDR, addr)
-        return self.dp.read_ap(MiniAP.AP0_DRW_ADDR)
-
-    def write32(self, addr, val):
-        self.dp.write_ap(MiniAP.AP0_TAR_ADDR, addr)
-        self.dp.write_ap(MiniAP.AP0_DRW_ADDR, val)
-
 FLASH_ALGO = {
     'load_address' : 0x20000000,
 
@@ -382,7 +357,6 @@ class STM32H7B0_256K(CoreSightTarget):
     VENDOR = "STMicroelectronics"
 
     MEMORY_MAP = MemoryMap(
-        # TODO: change these twos to fours
         FlashRegion( start=0x08000000, length=0x40000,  sector_size=0x2000,
                                                         page_size=0x8000,
                                                         is_boot_memory=True,
@@ -404,7 +378,7 @@ class STM32H7B0_256K(CoreSightTarget):
 
     def __init__(self, session):
         super().__init__(session, self.MEMORY_MAP)
-    '''
+
     def assert_reset_for_connect(self):
         self.dp.assert_reset(1)
 
@@ -413,7 +387,7 @@ class STM32H7B0_256K(CoreSightTarget):
 
         # At this point we can't access full AP as it is not initialized yet.
         # Let's create a minimalistic AP and use it.
-        ap = MiniAP(self.dp)
+        ap = MinimalMemAP(self.dp)
         ap.init()
 
         DEMCR_value = ap.read32(CortexM.DEMCR)
@@ -459,7 +433,6 @@ class STM32H7B0_256K(CoreSightTarget):
 
         return seq
 
-    '''
     def post_connect_hook(self):
         self.write32(DBGMCU.CR, DBGMCU.CR_VALUE)
 
@@ -1127,7 +1100,7 @@ def main():
             assert board is not None
             target = board.target
 
-            if True:
+            if False:
                 # This successfully erases
                 eraser = FlashEraser(session, FlashEraser.Mode.SECTOR)
                 eraser.erase([
@@ -1135,7 +1108,7 @@ def main():
                     (0x0810_0000, 0x0810_0000 + (256 * 1024)),
                 ])
             programmer = FileProgrammer(session, progress=None, no_reset=False)
-            programmer.program("build/gw_retro_go_intflash.bin", base_address=0x0810_0000)
+            programmer.program("build/gw_retro_go_intflash.bin", base_address=0x0800_0000)
             #programmer.program("build/gw_retro_go_intflash.bin", base_address=0x0810_0000)
             target.reset()
             breakpoint()
