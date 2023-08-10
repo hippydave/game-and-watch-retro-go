@@ -39,9 +39,6 @@ logging.getLogger('pyocd').setLevel(logging.WARNING)
 context_counter = 1
 sleep_duration = 0.05
 
-# Variable to aid in profiling
-t_wait = 0
-
 
 def sha256(data):
     return hashlib.sha256(data).digest()
@@ -616,13 +613,11 @@ def start_flashapp(intflash_address):
 
 
 def get_context(timeout=10):
-    global t_wait
     t_start = time()
     t_deadline = time() + timeout
     while True:
         for context in contexts:
             if not read_int(context["ready"]):
-                t_wait += (time() - t_start)
                 return context
             if time() > t_deadline:
                 raise TimeoutError
@@ -631,7 +626,6 @@ def get_context(timeout=10):
 
 
 def wait_for_all_contexts_complete(timeout=10):
-    global t_wait
     t_start = time()
     t_deadline = time() + timeout
     for context in contexts:
@@ -639,14 +633,12 @@ def wait_for_all_contexts_complete(timeout=10):
             if time() > t_deadline:
                 raise TimeoutError
             sleep(sleep_duration)
-    t_wait += (time() - t_start)
     wait_for("IDLE", timeout = t_deadline - time())
 
 
 
 def wait_for(status: str, timeout=10):
     """Block until the on-device status is matched."""
-    global t_wait
     t_start = time()
     t_deadline = time() + timeout
     error_mask = 0xFFFF_0000
@@ -661,8 +653,6 @@ def wait_for(status: str, timeout=10):
         if time() > t_deadline:
             raise TimeoutError
         sleep(sleep_duration)
-
-    t_wait += (time() - t_start)
 
 
 def validate_extflash_offset(val):
