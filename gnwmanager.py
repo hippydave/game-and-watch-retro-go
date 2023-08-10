@@ -452,7 +452,7 @@ def read_int(key: Union[int, str, Variable], signed: bool = False)-> int:
 
 def disable_debug():
     """Disables the Debug block, reducing battery consumption."""
-    target.write32(0x5C001004, 0x00000000)
+    target.write32(DBGMCU.CR, 0x00000000)
 
 
 def write_chunk_idx(idx: int) -> None:
@@ -665,14 +665,8 @@ def validate_extflash_offset(val):
 ################
 # CLI Commands #
 ################
-def flash(*, args, **kwargs):
-    """Flash a binary to the external flash.
-
-    Progress file format:
-     * line 1: sha256 hash of extflash binary.
-     * line 2: Number of chunks successfully flashed.
-    """
-    validate_extflash_offset(args.address)
+def _flash_ext(args):
+    validate_extflash_offset(args.offset)
 
     data = args.file.read_bytes()
     data_time = args.file.stat().st_mtime
@@ -697,7 +691,7 @@ def flash(*, args, **kwargs):
 
     write_chunk_count(total_n_chunks);
 
-    base_address = args.address + (previous_chunks_already_flashed * chunk_size)
+    base_address = args.offset + (previous_chunks_already_flashed * chunk_size)
     with tqdm(initial=previous_chunks_already_flashed, total=total_n_chunks) as pbar:
         for i, (chunk, compressed_chunk) in enumerate(zip(chunks, compress_chunks(chunks))):
             chunk_1_idx = previous_chunks_already_flashed + i + 1
@@ -733,8 +727,37 @@ def flash(*, args, **kwargs):
         args.progress_file.unlink()
 
 
+def flash(*, args, **kwargs):
+    """Flash a binary to the external flash.
+
+    Progress file format:
+     * line 1: sha256 hash of extflash binary.
+     * line 2: Number of chunks successfully flashed.
+    """
+    if args.destination == "ext":
+        _flash_ext(args)
+        return
+
+    if args.destination not in ("bank1", "bank2"):
+        raise NotImplementedError
+
+    programmer = FileProgrammer(session, progress=None, no_reset=False)
+    base_address = 0x0800_0000 if args.destination == "bank1" else 0x0810_0000
+    base_address += args.offset
+
+    programmer.program(str(args.file), base_address=base_address)
+
+
 def erase(**kwargs):
-    """Erase the entire external flash."""
+    """Erase the entire external flash.
+
+    TODO: add intflash support
+    eraser = FlashEraser(session, FlashEraser.Mode.SECTOR)
+    eraser.erase([
+        (0x0800_0000, 0x0800_0000 + (256 * 1024)),
+        (0x0810_0000, 0x0810_0000 + (256 * 1024)),
+    ])
+    """
     # Just setting an artibrarily long timeout
     extflash_erase(0, 0, whole_chip=True, timeout=10_000)
 
@@ -983,7 +1006,6 @@ def main():
     )
     subparsers = parser.add_subparsers(dest="command")
 
-
     def add_command(handler):
         """Add a subcommand, like "flash"."""
         subparser = subparsers.add_parser(handler.__name__, parents=[global_parser])
@@ -991,12 +1013,14 @@ def main():
         return subparser
 
     subparser = add_command(flash)
+    subparser.add_argument("destination", choices=("bank1", "bank2", "ext"),
+            help="On-device location to place binary.")
     subparser.add_argument("file", type=Path,
             help="Binary file to flash.")
-    subparser.add_argument("address", type=lambda x: int(x,0),
-            help="Offset into external flash")
+    subparser.add_argument("--offset", type=lambda x: int(x,0), default=0,
+            help="Offset into specified flash location.")
     subparser.add_argument("--progress-file", type=Path,
-            help="Save/Load progress from a file; allows resuming a interrupted flash operation.")
+            help="Save/Load progress from a file; allows resuming a interrupted extflash operation.")
 
     subparser = add_command(erase)
 
@@ -1080,6 +1104,7 @@ def main():
         "frequency": 5_000_000,
     }
 
+    global session
     session = ConnectHelper.session_with_chosen_probe(options=options)
     session.board.target = STM32H7B0_256K(session)
 
@@ -1090,33 +1115,30 @@ def main():
             assert board is not None
             target = board.target
 
-            if False:
-                # This successfully erases
-                eraser = FlashEraser(session, FlashEraser.Mode.SECTOR)
-                eraser.erase([
-                    (0x0800_0000, 0x0800_0000 + (256 * 1024)),
-                    (0x0810_0000, 0x0810_0000 + (256 * 1024)),
-                ])
-            programmer = FileProgrammer(session, progress=None, no_reset=False)
-            programmer.program("build/gw_retro_go_intflash.bin", base_address=0x0800_0000)
-            #programmer.program("build/gw_retro_go_intflash.bin", base_address=0x0810_0000)
-            target.reset()
-            breakpoint()
-
+            last_flashed_address = None
             try:
-                for i, args in enumerate(parsed_args):
-                    if i == 0:
-                        start_flashapp(args.intflash_address)
+                for args in parsed_args:
+                    if args.command == "flash":
+                        if args.destination == "bank1":
+                            flash(args=args)
+                            last_flashed_address =  0x0800_0000 + args.offset
+                            continue
+                        elif args.destination == "bank1":
+                            flash(args=args)
+                            last_flashed_address =  0x0810_0000 + args.offset
+                            continue
 
-                        filesystem_offset = read_int("lfs_cfg_context") - 0x9000_0000
-                        block_size = read_int("lfs_cfg_block_size")
-                        block_count = read_int("lfs_cfg_block_count")
+                    start_flashapp(args.intflash_address)
 
-                        if block_size==0 or block_count==0:
-                            raise DataError
+                    filesystem_offset = read_int("lfs_cfg_context") - 0x9000_0000
+                    block_size = read_int("lfs_cfg_block_size")
+                    block_count = read_int("lfs_cfg_block_count")
 
-                        lfs_context = LfsDriverContext(filesystem_offset)
-                        fs = LittleFS(lfs_context, block_size=block_size, block_count=block_count)
+                    if block_size==0 or block_count==0:
+                        raise DataError
+
+                    lfs_context = LfsDriverContext(filesystem_offset)
+                    fs = LittleFS(lfs_context, block_size=block_size, block_count=block_count)
 
                     commands[args.command](
                         args=args,
@@ -1130,7 +1152,7 @@ def main():
                     disable_debug()
 
                 target.reset_and_halt()
-                set_msp_pc(args.intflash_address)
+                set_msp_pc(last_flashed_address if last_flashed_address else args.intflash_address)
                 target.resume()
     except usb.core.USBError as e:
         new_message = str(e) + "\n\n\nTry unplugging and replugging in your adapter.\n\n"

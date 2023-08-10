@@ -65,7 +65,7 @@ else
 	endif
 endif
 
-# Configure INTFLASH_BANK and INTFLASH_ADDRESS
+# Derive INTFLASH_BANK an/and INTFLASH_ADDRESS and enforce consistency
 ifdef INTFLASH_ADDRESS
 INTFLASH_ADDRESS_DECIMAL = $(shell printf "%d" $(INTFLASH_ADDRESS))
 ifdef INTFLASH_BANK
@@ -105,6 +105,18 @@ INTFLASH_ADDRESS = 0x08000000
 INTFLASH_BANK = 1
 endif
 endif
+
+# For GNWMANAGER flashing
+ifeq ($(INTFLASH_BANK),1)
+INTFLASH_BANK_STR = bank1
+INTFLASH_BANK_OFFSET = $(shell echo $$(($(INTFLASH_ADDRESS) - 0x08000000)))
+endif
+
+ifeq ($(INTFLASH_BANK),2)
+INTFLASH_BANK_STR = bank2
+INTFLASH_BANK_OFFSET = $(shell echo $$(($(INTFLASH_ADDRESS) - 0x08100000)))
+endif
+
 
 GNWMANAGER = $(PYTHON3) gnwmanager.py --intflash-address=$(INTFLASH_ADDRESS)
 
@@ -839,7 +851,7 @@ start:  # Start code located at INTFLASH_ADDRESS
 
 # Programs the internal flash using a new OpenOCD instance
 flash_intflash: $(BUILD_DIR)/$(TARGET)_intflash.bin
-	@$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "program $< $(INTFLASH_ADDRESS) verify reset exit"
+	$(GNWMANAGER) flash $(INTFLASH_BANK_STR) $< --offset $(INTFLASH_BANK_OFFSET)
 .PHONY: flash_intflash
 
 # Flashes using an existing openocd instance
@@ -847,17 +859,14 @@ flash_intflash_nc: $(BUILD_DIR)/$(TARGET)_intflash.bin
 	echo "program $< $(INTFLASH_ADDRESS) verify reset" | nc -c localhost 4444
 .PHONY: flash_intflash_nc
 
-flash_extflash: $(BUILD_DIR)/$(TARGET)_extflash.bin pyocd_check_pack
-	@$(GNWMANAGER) flash $(BUILD_DIR)/$(TARGET)_extflash.bin $(EXTFLASH_OFFSET) --progress-file=$(BUILD_DIR)/gnwmanager-flash-progress \
+flash_extflash: $(BUILD_DIR)/$(TARGET)_extflash.bin
+	@$(GNWMANAGER) flash ext $< --offset $(EXTFLASH_OFFSET) --progress-file=$(BUILD_DIR)/gnwmanager-flash-progress \
 		|| (echo "Game & Watch connection interrupt; re-run flash command to resume.\n" && exit 1)
 .PHONY: flash_extflash
 
 # Programs both the external and internal flash.
 flash: CheckTools CheckDirtySubmodules
 	$(V)$(MAKE) flash_intflash
-	@if [ "$(INTFLASH_ADDRESS)" != "0x08000000" ]; then \
-		echo "\n\nPower on your Game & Watch, then press any key to continue..."; read -n1 -r key; \
-    fi
 	$(V)$(MAKE) flash_extflash
 .PHONY: flash
 
@@ -1053,19 +1062,6 @@ clean:
 distclean: clean
 	$(V)$(ECHO) [ RM ] $(SDK_DIR)
 	$(V)rm -rf $(SDK_DIR)
-
-#########
-# pyOCD #
-#########
-pyocd_install_pack:
-	$(PYOCD) pack --install STM32H7B0VBTx
-.PHONY: pyocd_install_pack
-
-pyocd_check_pack:
-	@if [ $(shell pyocd pack find STM32H7B0VBTx --no-header 2>/dev/null | grep -c "True") -eq 0 ]; then \
-		$(MAKE) pyocd_install_pack; \
-	fi
-.PHONY: pyocd_check_pack
 
 #######################################
 # dependencies
