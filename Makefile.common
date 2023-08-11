@@ -845,7 +845,7 @@ flash: CheckTools CheckDirtySubmodules
 .PHONY: flash
 
 monitor:
-	$(V)$(PYTHON3) tools/logpoll.py
+	@$(GNWMANAGER) monitor
 .PHONY: monitor
 
 flash-monitor: flash

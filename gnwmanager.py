@@ -6,7 +6,7 @@ import tamp
 import readline
 import struct
 import sys
-from pyocd.core.exceptions import ProbeError
+from pyocd.core.exceptions import ProbeError, TransferFaultError, TransferTimeoutError
 from pyocd.coresight.coresight_target import CoreSightTarget
 from pyocd.core.memory_map import (FlashRegion, RamRegion, MemoryMap)
 from pyocd.coresight.cortex_m import CortexM
@@ -22,6 +22,7 @@ from tqdm import tqdm
 from datetime import datetime, timezone
 from PIL import Image
 from copy import deepcopy
+from contextlib import suppress
 
 from collections import namedtuple
 
@@ -993,6 +994,38 @@ def start(**kwargs):
     pass
 
 
+def monitor(*, args, **kwargs):
+    last_idx = 0
+    logbuf_addr = comm["logbuf"].address
+    logbuf_size = comm["logbuf"].size
+
+    def read_and_decode(*args):
+        return "".join(chr(x) for x in target.read_memory_block8(*args))
+
+    while True:
+        with suppress(TransferFaultError, TransferTimeoutError):
+            log_idx = read_int('log_idx')
+
+            if log_idx > last_idx:
+                # print the new data since last iteration
+                logbuf_str = read_and_decode(logbuf_addr + last_idx, log_idx - last_idx)
+                sys.stdout.write(logbuf_str)
+            elif log_idx > 0 and log_idx < last_idx:
+                # Get new data from the end of the buffer until the first null byte
+                logbuf_str = read_and_decode(logbuf_addr + last_idx, logbuf_size - last_idx)
+
+                try:
+                    end = logbuf_str.index("\x00") - 1
+                except ValueError:
+                    end = len(logbuf_str)
+
+                # Read new data from the beginning and append it
+                logbuf_str += read_and_decode(logbuf_addr, log_idx)
+                sys.stdout.write(logbuf_str)
+
+            last_idx = log_idx
+
+
 def main():
     global commands, subparsers
     commands = {}
@@ -1075,6 +1108,8 @@ def main():
 
     subparser = add_command(start)
 
+    subparser = add_command(monitor)
+
     subparser = add_command(shell)
 
     parser.set_defaults(command='shell')
@@ -1117,6 +1152,8 @@ def main():
 
     options = {
         "frequency": 5_000_000,
+        "connect_mode": "attach",
+        "warning.cortex_m_default": False,
     }
 
     global session
@@ -1133,6 +1170,7 @@ def main():
             last_flashed_address = None
             try:
                 for args in parsed_args:
+                    # Check for commands that explicitly don't want the flashapp
                     if args.command == "flash":
                         if args.destination == "bank1":
                             flash(args=args)
@@ -1142,6 +1180,9 @@ def main():
                             flash(args=args)
                             last_flashed_address =  0x0810_0000 + args.offset
                             continue
+                    elif args.command == "monitor":
+                        monitor(args=args)
+                        continue
 
                     start_flashapp(args.intflash_address)
 
@@ -1163,12 +1204,13 @@ def main():
                         parser=parser,
                     )
             finally:
-                if not args.no_disable_debug:
-                    disable_debug()
+                if args.command not in ("monitor", ):
+                    if not args.no_disable_debug:
+                        disable_debug()
 
-                target.reset_and_halt()
-                set_msp_pc(last_flashed_address if last_flashed_address else args.intflash_address)
-                target.resume()
+                    target.reset_and_halt()
+                    set_msp_pc(last_flashed_address if last_flashed_address else args.intflash_address)
+                    target.resume()
     except usb.core.USBError as e:
         new_message = str(e) + "\n\n\nTry unplugging and replugging in your adapter.\n\n"
         raise type(e)(new_message) from e
