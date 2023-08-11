@@ -118,7 +118,7 @@ INTFLASH_BANK_OFFSET = $(shell echo $$(($(INTFLASH_ADDRESS) - 0x08100000)))
 endif
 
 
-GNWMANAGER = $(PYTHON3) gnwmanager.py --intflash-address=$(INTFLASH_ADDRESS)
+GNWMANAGER = $(PYTHON3) gnwmanager.py --intflash-address=$(INTFLASH_ADDRESS) $(RESET_DBGMCU_PARAM)
 
 # Configure external flash size in MB (Megabytes)
 EXTFLASH_SIZE_MB ?= 1
@@ -188,13 +188,12 @@ endif
 # Set to 0 to keep the clocks running when suspended (makes debugging easier)
 RESET_DBGMCU ?= 1
 ifeq ($(RESET_DBGMCU),1)
-	RESET_DBGMCU_CMD = $(MAKE) reset_dbgmcu
+	RESET_DBGMCU_PARAM :=
 else
-	RESET_DBGMCU_CMD = $(MAKE) reset_mcu
+	RESET_DBGMCU_PARAM := --no-disable-debug
 endif
 
 PYTHON3 ?= /usr/bin/env python3
-PYOCD ?= pyocd
 
 #######################################
 # paths
@@ -786,7 +785,7 @@ $(BUILD_DIR):
 OPENOCD ?= openocd
 ADAPTER ?= stlink
 
-# Starts openocd and attaches to the target. To be used with 'flash_intflash_nc' and 'gdb'
+# Starts openocd and attaches to the target.
 openocd:
 	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "init; halt"
 .PHONY: openocd
@@ -874,22 +873,11 @@ size: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET)_intflash.bin
 	$(V)./scripts/size.sh $<
 .PHONY: size
 
-reset_dbgmcu:
-	# Reset the DBGMCU configuration register (DBGMCU_CR)
-	$(V)$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "init; reset halt; mww 0x5C001004 0x00000000; resume; exit;"
-.PHONY: reset_dbgmcu
-
-reset_mcu:
-	$(V)$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "init; reset run; exit;" 2> $(BUILD_DIR)/openocd.log
-.PHONY: reset_mcu
 
 gdb: $(BUILD_DIR)/$(TARGET).elf
 	$(GDB) $< -ex "target extended-remote :3333"
 .PHONY: gdb
 
-# Flashes intflash *only* and launches gdb afterwards
-gdb_intflash: flash_intflash_nc gdb
-.PHONY: gdb_intflash
 
 dump_logs: $(BUILD_DIR)/$(TARGET).elf
 	$(V)./scripts/dump_logs.sh
@@ -922,7 +910,6 @@ help:
 	@echo "  INTFLASH_BANK       - Sets the internal flash bank. Valid values {1,2} (default=1)."
 	@echo "  INTFLASH_ADDRESS    - Explicit internal flash address. If not provided, derived from INTFLASH_BANK."
 	@echo "  BIG_BANK            - Use internal flash bank as undocumented 256k.(default=1, set 0 to 128k)."
-	@echo "                        It's required patched OPENOCD to work"
 	@echo "  COMPRESS            - Configures ROM compression, Valid values {0,lzma} (default=lzma)."
 	@echo "  RESET_DBGMCU        - Configures if DBGMCU should be reset after flashing."
 	@echo "                        Set to 0 to disable power saving (default=1)"
@@ -986,18 +973,16 @@ help:
 	@echo "Targets:"
 	@echo "  docker            - Runs a docker container using the image created by docker_build"
 	@echo "  docker_build      - Builds a docker image"
-	@echo "  dump_logs         - Dumps the callstack and logbuf. Starts openocd and gdb under the hood."
 	@echo "  dump_screenshot   - Downloads the stored screenshot."
 	@echo "  flash             - Programs the internal and external flash"
 	@echo "  flash_all         - Alias for 'flash' (deprecated)"
 	@echo "  flash_extflash    - Only programs the external flash"
 	@echo "  flash_intflash    - Only programs the internal flash"
-	@echo "  flash_intflash_nc - Only programs the internal flash and uses an existing openocd server"
 	@echo "  gdb               - Starts gdb and attaches to openocd"
-	@echo "  gdb_intflash      - Runs flash_intflash_nc, then starts gdb and attaches to openocd"
 	@echo "  openocd           - Starts openocd with appropriate config"
+	@echo "  monitor           - Monitor device's stdout
 	@echo "  reset_dbgmcu      - Resets the unit and turns off DBGMCU (lowers battery drain)"
-	@echo "  reset_mcu         - Resets the unit"
+	@echo "  reset             - Resets the unit"
 	@echo "  romdef            - Dumps all rom info to roms.json in roms directory to custom display name and"
 	@echo "                      publish property under edit that file before make flash "
 	@echo "  size              - Prints size information for all sections"

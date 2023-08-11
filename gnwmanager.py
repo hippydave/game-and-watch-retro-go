@@ -11,6 +11,7 @@ from pyocd.coresight.coresight_target import CoreSightTarget
 from pyocd.core.memory_map import (FlashRegion, RamRegion, MemoryMap)
 from pyocd.coresight.cortex_m import CortexM
 from pyocd.coresight.minimal_mem_ap import MinimalMemAP
+from pyocd.gdbserver import GDBServer
 import usb
 import shlex
 from copy import copy
@@ -1028,6 +1029,11 @@ def monitor(*, args, **kwargs):
             last_idx = log_idx
 
 
+def gdbserver(**kwargs):
+    raise NotImplementedError("Not working yet.")
+    gdb_server = GDBServer(session)
+
+
 def main():
     global commands, subparsers
     commands = {}
@@ -1112,6 +1118,8 @@ def main():
 
     subparser = add_command(monitor)
 
+    subparser = add_command(gdbserver)
+
     subparser = add_command(shell)
 
     parser.set_defaults(command='shell')
@@ -1184,7 +1192,7 @@ def main():
                             last_flashed_address =  0x0810_0000 + args.offset
                             continue
 
-                    if args.command not in ("monitor", "start"):
+                    if args.command not in ("monitor", "start", "gdbserver"):
                         start_flashapp(args.intflash_address)
 
                         filesystem_offset = read_int("lfs_cfg_context") - 0x9000_0000
@@ -1205,7 +1213,7 @@ def main():
                         parser=parser,
                     )
             finally:
-                if args.command not in ("monitor", "start"):
+                if args.command not in ("monitor", "start", "gdbserver"):
                     if not args.no_disable_debug:
                         disable_debug()
 
