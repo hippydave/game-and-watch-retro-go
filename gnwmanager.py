@@ -986,12 +986,14 @@ def screenshot(*, args, fs, **kwargs):
     img.save(args.output)
 
 
-def start(**kwargs):
+def start(*, args, **kwargs):
     """Restart the device at --intflash-address.
 
     No-op operation; restarting is handled by the main loop.
     """
-    pass
+    target.reset_and_halt()
+    set_msp_pc(args.intflash_address)
+    target.resume()
 
 
 def monitor(*, args, **kwargs):
@@ -1168,6 +1170,7 @@ def main():
             target = board.target
 
             last_flashed_address = None
+            fs, block_size, block_count = None, 0, 0
             try:
                 for args in parsed_args:
                     # Check for commands that explicitly don't want the flashapp
@@ -1180,21 +1183,19 @@ def main():
                             flash(args=args)
                             last_flashed_address =  0x0810_0000 + args.offset
                             continue
-                    elif args.command == "monitor":
-                        monitor(args=args)
-                        continue
 
-                    start_flashapp(args.intflash_address)
+                    if args.command not in ("monitor", "start"):
+                        start_flashapp(args.intflash_address)
 
-                    filesystem_offset = read_int("lfs_cfg_context") - 0x9000_0000
-                    block_size = read_int("lfs_cfg_block_size")
-                    block_count = read_int("lfs_cfg_block_count")
+                        filesystem_offset = read_int("lfs_cfg_context") - 0x9000_0000
+                        block_size = read_int("lfs_cfg_block_size")
+                        block_count = read_int("lfs_cfg_block_count")
 
-                    if block_size==0 or block_count==0:
-                        raise DataError
+                        if block_size==0 or block_count==0:
+                            raise DataError
 
-                    lfs_context = LfsDriverContext(filesystem_offset)
-                    fs = LittleFS(lfs_context, block_size=block_size, block_count=block_count)
+                        lfs_context = LfsDriverContext(filesystem_offset)
+                        fs = LittleFS(lfs_context, block_size=block_size, block_count=block_count)
 
                     commands[args.command](
                         args=args,
@@ -1204,7 +1205,7 @@ def main():
                         parser=parser,
                     )
             finally:
-                if args.command not in ("monitor", ):
+                if args.command not in ("monitor", "start"):
                     if not args.no_disable_debug:
                         disable_debug()
 

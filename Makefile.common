@@ -792,7 +792,7 @@ openocd:
 .PHONY: openocd
 
 reset:
-	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "init; reset; exit"
+	$(GNWMANAGER) start
 .PHONY: reset
 
 erase_intflash_1:
