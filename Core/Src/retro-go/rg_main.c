@@ -839,7 +839,7 @@ void app_main(uint8_t boot_mode)
     // gui instead of the last ROM as a fallback.
     retro_emulator_file_t *file = odroid_settings_StartupFile_get();
     if (emulator_is_file_valid(file) && ((GW_GetBootButtons() & B_TIME) == 0)) {
-        emulator_start(file, (file->save_address != 0), true, 1);
+        emulator_start(file, (file->save_address != 0), false, 1);
     }
     else
     {
