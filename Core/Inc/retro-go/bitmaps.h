@@ -14,6 +14,7 @@ extern const retro_logo_image logo_rgo;
 extern const retro_logo_image logo_flash;
 extern const retro_logo_image logo_rgw;
 extern const retro_logo_image logo_gnw;
+extern const retro_logo_image logo_triforce;
 
 extern const retro_logo_image header_sg1000;
 extern const retro_logo_image header_col;

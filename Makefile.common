@@ -42,7 +42,7 @@ $(error Missing or invalid GNW_TARGET option. Valid values {mario|zelda})
 endif
 
 # Disable system logos splash screen at startup
-DISABLE_SPLASH_SCREEN ?= 0
+DISABLE_SPLASH_SCREEN ?= 1
 
 # Default NES emulator is fceumm
 FORCE_NOFRENDO ?= 0 
